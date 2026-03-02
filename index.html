@@ -261,6 +261,27 @@
 
   .task-row { display: flex; align-items: center; gap: 14px; padding: 16px 18px; }
 
+  /* DESCRIPTION */
+  .desc-toggle {
+    background: none; border: none; cursor: pointer;
+    color: var(--muted); padding: 0 2px; display: flex; align-items: center;
+    font-size: 13px; transition: color 0.2s; flex-shrink: 0;
+  }
+  .desc-toggle:hover { color: var(--accent); }
+  .desc-toggle.has-desc { color: var(--accent); }
+  .desc-panel { display: none; padding: 0 18px 14px 52px; }
+  .desc-panel.open { display: block; }
+  .desc-textarea {
+    width: 100%; min-height: 72px; resize: vertical;
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; background: var(--bg);
+    font-family: 'DM Sans', sans-serif; font-size: 0.85rem;
+    line-height: 1.55; color: var(--ink); outline: none;
+    transition: border-color 0.2s;
+  }
+  .desc-textarea::placeholder { color: var(--muted); font-weight: 300; }
+  .desc-textarea:focus { border-color: var(--accent); }
+
   .task-check {
     width: 20px; height: 20px; border-radius: 50%;
     border: 1.5px solid var(--border); flex-shrink: 0;
@@ -922,9 +943,15 @@ function render() {
         <span class="task-text" contenteditable="true" spellcheck="false">${escHtml(task.text)}</span>
         <div class="task-meta">
           ${task.tag ? `<span class="tag tag-${task.tag}">${task.tag}</span>` : ''}
+          <button class="desc-toggle${task.desc ? ' has-desc' : ''}" title="${task.desc ? 'Edit description' : 'Add description'}">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="4" x2="14" y2="4"/><line x1="2" y1="8" x2="10" y2="8"/><line x1="2" y1="12" x2="12" y2="12"/></svg>
+          </button>
           <button class="pomo-btn${isRunning ? ' running' : ''}" title="Pomodoro timer">▶</button>
           <button class="delete-btn" title="Delete">✕</button>
         </div>
+      </div>
+      <div class="desc-panel" data-desc-id="${task.id}">
+        <textarea class="desc-textarea" placeholder="Add a description…" spellcheck="false">${escHtml(task.desc || '')}</textarea>
       </div>
       <div class="pomo-panel${isActive ? ' open' : ''}" data-pomo-id="${task.id}">
         <div class="pomo-task-label">Focusing on this task</div>
@@ -962,7 +989,19 @@ function render() {
         render();
       });
     }
-    el.querySelector('.pomo-btn').addEventListener('click', () => {
+    el.querySelector('.desc-toggle').addEventListener('click', () => {
+      const panel = el.querySelector('.desc-panel');
+      panel.classList.toggle('open');
+      if (panel.classList.contains('open')) el.querySelector('.desc-textarea').focus();
+    });
+    el.querySelector('.desc-textarea').addEventListener('input', e => {
+      task.desc = e.target.value;
+      const tog = el.querySelector('.desc-toggle');
+      tog.classList.toggle('has-desc', !!task.desc);
+      tog.title = task.desc ? 'Edit description' : 'Add description';
+      save();
+    });
+        el.querySelector('.pomo-btn').addEventListener('click', () => {
       const panel = el.querySelector('.pomo-panel');
       if (panel.classList.contains('open')) {
         panel.classList.remove('open');
@@ -1063,7 +1102,7 @@ document.getElementById('pomoDuration').addEventListener('change', e => {
 // ── IMPORT / EXPORT ────────────────────────────────────────────────────────────
 document.getElementById('exportBtn').addEventListener('click', async () => {
   const payload = JSON.stringify(tasks.map(t => ({
-    id: t.id, text: t.text, done: t.done, tag: t.tag
+    id: t.id, text: t.text, desc: t.desc || null, done: t.done, tag: t.tag
   })), null, 2);
   try {
     await navigator.clipboard.writeText(payload);
@@ -1105,6 +1144,7 @@ document.getElementById('importBtn').addEventListener('click', async () => {
   const newTasks = imported.map(t => ({
     id: existingIds.has(t.id) ? Date.now() + Math.random() : (t.id || Date.now()),
     text: t.text,
+    desc: t.desc || null,
     done: !!t.done,
     tag: t.tag || null
   }));

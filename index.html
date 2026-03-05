@@ -253,11 +253,21 @@
     border-radius: var(--radius); overflow: hidden;
     transition: box-shadow 0.2s, opacity 0.3s, border-color 0.3s;
     animation: slideIn 0.3s ease both;
+    cursor: default;
   }
   .task-item:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
   .task-item.done { opacity: 0.45; }
   .task-item.done .task-text { text-decoration: line-through; color: var(--muted); }
   .task-item.active-pomo { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+  .task-item.dragging { opacity: 0.4; box-shadow: 0 8px 32px rgba(0,0,0,0.15); }
+  .task-item.drag-over { border-color: var(--accent); border-style: dashed; }
+  .drag-handle {
+    color: var(--border); cursor: grab; flex-shrink: 0;
+    display: flex; align-items: center; padding: 2px 0;
+    transition: color 0.2s;
+  }
+  .drag-handle:active { cursor: grabbing; }
+  .task-item:hover .drag-handle { color: var(--muted); }
 
   .task-row { display: flex; align-items: center; gap: 14px; padding: 16px 18px; }
 
@@ -935,6 +945,13 @@ function render() {
     el.dataset.id = task.id;
     el.innerHTML = `
       <div class="task-row">
+        <div class="drag-handle" title="Drag to reorder">
+          <svg width="12" height="16" viewBox="0 0 12 16" fill="currentColor">
+            <circle cx="4" cy="3" r="1.5"/><circle cx="8" cy="3" r="1.5"/>
+            <circle cx="4" cy="8" r="1.5"/><circle cx="8" cy="8" r="1.5"/>
+            <circle cx="4" cy="13" r="1.5"/><circle cx="8" cy="13" r="1.5"/>
+          </svg>
+        </div>
         <div class="task-check" title="Toggle done">
           <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
             <path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1017,6 +1034,7 @@ function render() {
     el.querySelector('.reset-btn').addEventListener('click', () => resetTimer(task.id));
     el.querySelector('.skip-btn').addEventListener('click', () => skipTimer(task.id));
 
+    initDrag(el, task.id);
     list.appendChild(el);
   });
   updateProgress();
@@ -1041,7 +1059,7 @@ document.querySelectorAll('.tag-btn').forEach(btn => {
 function addTask() {
   const input = document.getElementById('addInput');
   const text = input.value.trim(); if (!text) return;
-  tasks.unshift({ id: Date.now(), text, done: false, tag: selectedTag });
+  tasks.push({ id: Date.now(), text, done: false, tag: selectedTag });
   save(); input.value = ''; selectedTag = null;
   document.querySelectorAll('.tag-btn').forEach(b => b.classList.remove('selected'));
   activeFilter = 'all';
@@ -1159,6 +1177,58 @@ document.getElementById('importBtn').addEventListener('click', async () => {
 const hour = new Date().getHours();
 document.getElementById('timeOfDay').textContent = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
 document.getElementById('dateLabel').textContent = new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+
+// ── DRAG TO REORDER ────────────────────────────────────────────────────────────
+let dragSrcId = null;
+
+function initDrag(el, taskId) {
+  const handle = el.querySelector('.drag-handle');
+  el.draggable = false; // only drag via handle
+
+  handle.addEventListener('mousedown', () => { el.draggable = true; });
+  handle.addEventListener('touchstart', () => { el.draggable = true; }, { passive: true });
+
+  el.addEventListener('dragend', () => {
+    el.draggable = false;
+    el.classList.remove('dragging');
+    document.querySelectorAll('.task-item').forEach(e => e.classList.remove('drag-over'));
+  });
+
+  el.addEventListener('dragstart', e => {
+    dragSrcId = taskId;
+    el.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', taskId);
+  });
+
+  el.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    document.querySelectorAll('.task-item').forEach(e => e.classList.remove('drag-over'));
+    if (dragSrcId !== taskId) el.classList.add('drag-over');
+  });
+
+  el.addEventListener('dragleave', () => {
+    el.classList.remove('drag-over');
+  });
+
+  el.addEventListener('drop', e => {
+    e.preventDefault();
+    el.classList.remove('drag-over');
+    if (dragSrcId === null || dragSrcId === taskId) return;
+
+    const srcIdx = tasks.findIndex(t => t.id === dragSrcId);
+    const dstIdx = tasks.findIndex(t => t.id === taskId);
+    if (srcIdx === -1 || dstIdx === -1) return;
+
+    const [moved] = tasks.splice(srcIdx, 1);
+    tasks.splice(dstIdx, 0, moved);
+    dragSrcId = null;
+    save();
+    render();
+  });
+}
+
 
 render();
 </script>
